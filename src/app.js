@@ -5,12 +5,19 @@ import helmet from "helmet";
 import compression from "compression";
 import cookieParser from "cookie-parser";
 
+//user routes
 import userRoutes from "./routes/user-auth-routes.js";
+import userProfileRoutes from "./routes/user-profile-routes.js";
+import userSettingsRoutes from "./routes/user-settings.routes.js";
+
+//admin routes
 import adminRoutes from "./routes/admin.routes.js";
 
+//middlewares
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { swaggerUiServe, swaggerUiSetup } from "./swagger/swagger.js";
 
+//config
 import { env } from "./config/env.js";
 
 dotenv.config();
@@ -40,7 +47,9 @@ app.use("/api-docs", swaggerUiServe, swaggerUiSetup);
 // ROUTES
 // =======================
 
-app.use("/api/users", userRoutes);
+app.use("/api/users/auth", userRoutes);
+app.use("/api/users/profile", userProfileRoutes);
+app.use("/api/users/settings", userSettingsRoutes);
 app.use("/api/admin", adminRoutes);
 
 // =======================

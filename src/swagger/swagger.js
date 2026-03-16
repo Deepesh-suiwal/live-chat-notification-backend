@@ -2,6 +2,7 @@ import swaggerUi from "swagger-ui-express";
 
 import { adminAuthSwagger } from "./admin-auth.swagger.js";
 import { userAuthSwagger } from "./user-auth.swagger.js";
+import { userProfileSwagger } from "./user-profile.swagger.js";
 
 export const swaggerSpec = {
   openapi: "3.0.0",
@@ -27,6 +28,10 @@ export const swaggerSpec = {
       name: "User Auth",
       description: "User authentication APIs",
     },
+    {
+      name: "User Profile",
+      description: "User profile APIs",
+    },
   ],
   components: {
     securitySchemes: {
@@ -40,7 +45,7 @@ export const swaggerSpec = {
         in: "cookie",
         name: "userAccessToken",
       },
-        userResetPasswordAuth: {
+      userResetPasswordAuth: {
         type: "apiKey",
         in: "cookie",
         name: "userResetToken",
@@ -50,6 +55,7 @@ export const swaggerSpec = {
   paths: {
     ...adminAuthSwagger,
     ...userAuthSwagger,
+    ...userProfileSwagger,
   },
 };
 

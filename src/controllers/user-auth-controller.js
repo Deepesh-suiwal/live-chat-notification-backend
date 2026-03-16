@@ -1,3 +1,4 @@
+import userSession from "../models/user-session.js";
 import {
   loginUserService,
   registerUserService,
@@ -7,6 +8,7 @@ import {
   userResetPasswordService,
   refreshUserTokenService,
   googleLoginService,
+  checkTokenService,
 } from "../services/user-auth.service.js";
 import {
   ACCESS_COOKIE_OPTIONS,
@@ -17,7 +19,16 @@ import logger from "../utils/logger.js";
 
 export const googleLogin = async (req, res) => {
   try {
-    const result = await googleLoginService(req.body);
+    const ip =
+      req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.socket.remoteAddress ||
+      req.ip;
+
+    const result = await googleLoginService({
+      code: req.body.code,
+      ip,
+      userAgent: req.headers["user-agent"],
+    });
 
     if (result.status !== 200) {
       return res.status(result.status).json({
@@ -33,7 +44,7 @@ export const googleLogin = async (req, res) => {
       user: result.user,
     });
   } catch (error) {
-    logger.error(`GOOGLE LOGIN CONTROLLER ERROR: ${error}`);
+    logger.error(`GOOGLE LOGIN CONTROLLER ERROR: ${error.message}`);
 
     return res.status(500).json({
       message: "Server error",
@@ -47,6 +58,7 @@ export const register = async (req, res) => {
 
     return res.status(result.status).json({
       message: result.message,
+      otp: result.otp,
     });
   } catch (error) {
     logger.error(error);
@@ -73,7 +85,17 @@ export const verifyEmail = async (req, res) => {
 
 export const userLogin = async (req, res) => {
   try {
-    const result = await loginUserService(req.body);
+    const ip =
+      req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.socket.remoteAddress ||
+      req.ip;
+
+    const result = await loginUserService({
+      email: req.body.email,
+      password: req.body.password,
+      ip,
+      userAgent: req.headers["user-agent"],
+    });
 
     if (result.status !== 200) {
       return res.status(result.status).json({
@@ -81,15 +103,15 @@ export const userLogin = async (req, res) => {
       });
     }
 
-    res.cookie("userRefreshToken", result.refreshToken, REFRESH_COOKIE_OPTIONS);
     res.cookie("userAccessToken", result.accessToken, ACCESS_COOKIE_OPTIONS);
+    res.cookie("userRefreshToken", result.refreshToken, REFRESH_COOKIE_OPTIONS);
 
     return res.status(200).json({
       message: result.message,
       user: result.user,
     });
   } catch (error) {
-    logger.error(error);
+    logger.error(`LOCAL LOGIN CONTROLLER ERROR: ${error.message}`);
 
     return res.status(500).json({
       message: "Server error",
@@ -103,6 +125,7 @@ export const forgotPasswordOtp = async (req, res) => {
 
     return res.status(result.status).json({
       message: result.message,
+      otp: result.otp,
     });
   } catch (error) {
     logger.error(error);
@@ -125,7 +148,6 @@ export const verifyForgotPasswordOtp = async (req, res) => {
 
     return res.status(result.status).json({
       message: result.message,
-      expiresIn: result.expiresIn,
     });
   } catch (error) {
     logger.error(error);
@@ -156,24 +178,55 @@ export const userResetPassword = async (req, res) => {
     logger.error(`RESET PASSWORD ERROR: ${error}`);
 
     return res.status(500).json({
-      message: ERRORS.SERVER_ERROR,
+      message: "Server error",
     });
+  }
+};
+
+export const checkToken = async (req, res) => {
+  try {
+    res.set({
+      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+      Pragma: "no-cache",
+      Expires: "0",
+    });
+
+    const token = req.cookies?.userAccessToken;
+
+    const result = await checkTokenService(token);
+
+    if (result.status !== 200) {
+      return res.status(result.status).json({
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      user: result.data,
+    });
+  } catch (error) {
+    logger.error(`CHECK TOKEN ERROR: ${error}`);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
 export const userRefreshToken = async (req, res) => {
   try {
     const refreshToken = req.cookies.userRefreshToken;
-    logger.info({ refreshToken }, "Received refresh token for user");
 
     if (!refreshToken)
       return res.status(401).json({ message: "Refresh token missing" });
 
     const result = await refreshUserTokenService(refreshToken);
-
+    if (result.status !== 200) {
+      return res.status(result.status).json({
+        message: result.message,
+      });
+    }
     res.cookie("userAccessToken", result.accessToken, ACCESS_COOKIE_OPTIONS);
 
-    return res.status(result.status).json({
+    return res.status(200).json({
       message: result.message,
     });
   } catch (error) {
@@ -187,6 +240,12 @@ export const userRefreshToken = async (req, res) => {
 
 export const userLogout = async (req, res) => {
   try {
+    const { sessionId } = req.user;
+
+    await userSession.findByIdAndUpdate(sessionId, {
+      isActive: false,
+    });
+
     res.clearCookie("userAccessToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

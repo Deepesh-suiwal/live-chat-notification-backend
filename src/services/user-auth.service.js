@@ -2,6 +2,7 @@ import crypto from "crypto";
 import User from "../models/user-register.js";
 import UserProfile from "../models/user-profile.js";
 import Otp from "../models/user-otp.js";
+import Session from "../models/user-session.js";
 
 import { hashPassword } from "../utils/password.util.js";
 import { generateOtp, getOtpExpiry } from "../utils/generateOtp.util.js";
@@ -11,15 +12,19 @@ import {
   createUserAccessToken,
   createUserRefreshToken,
   createUserResetToken,
+  verifyUserAccessToken,
   verifyUserRefreshToken,
+  verifyUserResetToken,
 } from "../utils/jwt.util.js";
 
 import { sendEmail } from "../utils/email.util.js";
 import { googleClient } from "../config/google.js";
+import { UAParser } from "ua-parser-js";
 
 import { env } from "../config/env.js";
 
 import logger from "../utils/logger.js";
+import userSession from "../models/user-session.js";
 
 const OTP_CONFIG = {
   COOLDOWN_SECONDS: 60,
@@ -27,7 +32,7 @@ const OTP_CONFIG = {
   MAX_ATTEMPTS: 5,
 };
 
-export const googleLoginService = async ({ code }) => {
+export const googleLoginService = async ({ code, ip, userAgent }) => {
   try {
     if (!code) {
       return {
@@ -45,7 +50,7 @@ export const googleLoginService = async ({ code }) => {
       redirect_uri: env.GOOGLE_REDIRECT_URI,
     });
 
-    if (!tokens.id_token) {
+    if (!tokens?.id_token) {
       return {
         status: 401,
         message: "Failed to retrieve Google ID token",
@@ -63,7 +68,7 @@ export const googleLoginService = async ({ code }) => {
 
     const payload = ticket.getPayload();
 
-    if (!payload?.email || !payload.sub) {
+    if (!payload?.email || !payload?.sub) {
       return {
         status: 401,
         message: "Invalid Google token",
@@ -104,10 +109,6 @@ export const googleLoginService = async ({ code }) => {
         fullName,
       });
     } else if (!user.authProvider.includes("GOOGLE")) {
-      /* =====================================================
-       5️⃣ If account exists but Google not linked
-    ===================================================== */
-
       user.authProvider.push("GOOGLE");
 
       if (!user.providerId) {
@@ -120,9 +121,6 @@ export const googleLoginService = async ({ code }) => {
 
       await user.save();
     } else {
-      /* =====================================================
-       6️⃣ Check Google ID mismatch
-    ===================================================== */
       const storedGoogleId = user.providerId?.get("GOOGLE");
 
       if (storedGoogleId && storedGoogleId !== googleId) {
@@ -134,17 +132,42 @@ export const googleLoginService = async ({ code }) => {
     }
 
     /* =====================================================
+       5️⃣ Parse Device Info
+    ===================================================== */
+
+    const parser = new UAParser(userAgent);
+    const ua = parser.getResult();
+
+    /* =====================================================
+       6️⃣ Create Session (7 days expiry)
+    ===================================================== */
+
+    const expireAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const session = await Session.create({
+      userId: user._id,
+      ipAddress: ip,
+      browser: ua.browser?.name || "Unknown",
+      os: ua.os?.name || "Unknown",
+      device: ua.device?.type || "desktop",
+      userAgent,
+      expireAt,
+    });
+
+    /* =====================================================
        7️⃣ Generate JWT Tokens
     ===================================================== */
 
     const accessToken = createUserAccessToken({
       userId: user._id,
       role: user.role,
+      sessionId: session._id,
     });
 
     const refreshToken = createUserRefreshToken({
       userId: user._id,
       role: user.role,
+      sessionId: session._id,
     });
 
     /* =====================================================
@@ -161,10 +184,6 @@ export const googleLoginService = async ({ code }) => {
       },
     );
 
-    /* =====================================================
-       9️⃣ Remove password before returning
-    ===================================================== */
-
     const userObj = user.toObject();
     delete userObj.password;
 
@@ -176,7 +195,7 @@ export const googleLoginService = async ({ code }) => {
       refreshToken,
     };
   } catch (error) {
-    logger.error(`GOOGLE LOGIN SERVICE ERROR: ${error}`);
+    logger.error(`GOOGLE LOGIN SERVICE ERROR: ${error.message}`);
 
     return {
       status: 500,
@@ -184,7 +203,6 @@ export const googleLoginService = async ({ code }) => {
     };
   }
 };
-
 export const registerUserService = async ({ email, password, fullName }) => {
   const existingUser = await User.findOne({
     email,
@@ -267,7 +285,7 @@ export const registerUserService = async ({ email, password, fullName }) => {
     return {
       status: 200,
       message: "OTP sent successfully",
-      // otp, // optional (for sending email)
+      otp, // optional (for sending email)
     };
   }
 
@@ -426,76 +444,115 @@ export const verifyEmailService = async ({ email, otp }) => {
   };
 };
 
-export const loginUserService = async ({ email, password }) => {
-  const normalizedEmail = email.toLowerCase().trim();
+export const loginUserService = async ({ email, password, ip, userAgent }) => {
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
 
-  const user = await User.findOne({
-    email: normalizedEmail,
-    deletedAt: null,
-  }).select(
-    " +password role authProvider status fullName email isEmailVerified",
-  );
+    const user = await User.findOne({
+      email: normalizedEmail,
+      deletedAt: null,
+    }).select(
+      "+password role authProvider status fullName email isEmailVerified",
+    );
 
-  if (!user) {
-    return { status: 404, message: "User not found" };
-  }
+    if (!user) {
+      return { status: 404, message: "User not found" };
+    }
 
-  if (user.status === "INACTIVE") {
-    return { status: 403, message: "User not active" };
-  }
+    if (user.status === "INACTIVE") {
+      return { status: 403, message: "User not active" };
+    }
 
-  if (user.status === "SUSPENDED") {
-    return { status: 403, message: "Account suspended" };
-  }
+    if (user.status === "SUSPENDED") {
+      return { status: 403, message: "Account suspended" };
+    }
 
-  if (!user.authProvider.includes("LOCAL")) {
-    return { status: 403, message: "Use social login" };
-  }
+    if (!user.authProvider.includes("LOCAL")) {
+      return { status: 403, message: "Use social login" };
+    }
 
-  if (!user.isEmailVerified) {
-    return { status: 403, message: "Email not verified Please register again" };
-  }
+    if (!user.isEmailVerified) {
+      return { status: 403, message: "Email not verified" };
+    }
 
-  const isPasswordValid =
-    user.password && (await comparePassword(password, user.password));
+    const isPasswordValid =
+      user.password && (await comparePassword(password, user.password));
 
-  if (!isPasswordValid) {
-    return { status: 401, message: "Invalid credentials" };
-  }
-  /* ==============================
-     Update login metadata
-  ============================== */
+    if (!isPasswordValid) {
+      return { status: 401, message: "Invalid credentials" };
+    }
 
-  await User.updateOne(
-    { _id: user._id },
-    {
-      $set: {
-        lastLoginAt: new Date(),
-        lastLoginProvider: "LOCAL",
+    /* =====================================================
+       1️⃣ Parse Device Info
+    ===================================================== */
+
+    const parser = new UAParser(userAgent);
+    const ua = parser.getResult();
+
+    /* =====================================================
+       2️⃣ Create Session
+    ===================================================== */
+
+    const expireAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const session = await Session.create({
+      userId: user._id,
+      ipAddress: ip,
+      browser: ua.browser?.name || "Unknown",
+      os: ua.os?.name || "Unknown",
+      device: ua.device?.type || "desktop",
+      userAgent,
+      expireAt,
+    });
+
+    /* =====================================================
+       3️⃣ Generate Tokens (session bind)
+    ===================================================== */
+
+    const accessToken = createUserAccessToken({
+      userId: user._id,
+      role: user.role,
+      sessionId: session._id,
+    });
+
+    const refreshToken = createUserRefreshToken({
+      userId: user._id,
+      role: user.role,
+      sessionId: session._id,
+    });
+
+    /* =====================================================
+       4️⃣ Update Login Metadata
+    ===================================================== */
+
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          lastLoginAt: new Date(),
+          lastLoginProvider: "LOCAL",
+        },
       },
-    },
-  );
+    );
 
-  const accessToken = createUserAccessToken({
-    userId: user._id,
-    role: user.role,
-  });
+    const userObj = user.toObject();
+    delete userObj.password;
 
-  const refreshToken = createUserRefreshToken({
-    userId: user._id,
-    role: user.role,
-  });
-  // Remove password before sending response
-  const userObj = user.toObject();
-  delete userObj.password;
+    return {
+      status: 200,
+      message: "Login successful",
+      user: userObj,
+      accessToken,
+      refreshToken,
+    };
+  } catch (error) {
+    logger.error(`LOCAL LOGIN SERVICE ERROR: ${error.message}`);
 
-  return {
-    status: 200,
-    message: "Login successful",
-    user: userObj,
-    accessToken,
-    refreshToken,
-  };
+    return {
+      status: 500,
+      message: "Server error",
+    };
+  }
 };
 
 export const forgotPasswordService = async ({ email }) => {
@@ -564,6 +621,7 @@ export const forgotPasswordService = async ({ email }) => {
   return {
     status: 200,
     message: `Password reset OTP sent to ${normalizedEmail}`,
+    otp: otp,
   };
 };
 
@@ -642,11 +700,11 @@ export const verifyForgotPasswordService = async ({ email, otp }) => {
     status: 200,
     message: "OTP verified successfully",
     userResetToken: userResetToken,
-    expiresIn: "10 minutes",
   };
 };
 
 export const userResetPasswordService = async ({ token, newPassword }) => {
+  logger.info({ token, newPassword }, "Reset password request");
   if (!token) {
     return {
       status: 401,
@@ -672,14 +730,14 @@ export const userResetPasswordService = async ({ token, newPassword }) => {
     };
   }
 
-  const userId = payload.sub;
+  const userId = payload.userId;
 
   const user = await User.findById(userId);
 
   if (!user) {
     return {
       status: 404,
-      message: ERRORS.USER_NOT_FOUND,
+      message: "User not found",
     };
   }
 
@@ -689,11 +747,86 @@ export const userResetPasswordService = async ({ token, newPassword }) => {
   user.password = hashedPassword;
   user.passwordChangedAt = new Date();
 
-  await user.save();
+  // Ensure LOCAL provider exists
+  const providers = new Set(user.authProvider || []);
+  providers.add("LOCAL");
+  user.authProvider = Array.from(providers);
 
+  await user.save();
+  await userSession.updateMany(
+    { userId: userId, isActive: true },
+    { $set: { isActive: false } },
+  );
+
+  /* ==============================
+   Send Security Email
+============================== */
+
+  const emailResult = await sendEmail({
+    to: user.email,
+    subject: "Password Changed",
+    text: `Your password has been changed successfully.
+
+If this wasn't you, please contact support immediately.`,
+  });
+
+  if (!emailResult.success) {
+    logger.error(`Password change email failed for ${user.email}`);
+  } else {
+    logger.info(`Password change email sent to ${user.email}`);
+  }
   return {
     status: 200,
     message: "Password reset successful",
+  };
+};
+
+export const checkTokenService = async (token) => {
+  if (!token) {
+    return { status: 401, message: "Token not found" };
+  }
+
+  let payload;
+
+  try {
+    payload = verifyUserAccessToken(token);
+  } catch (error) {
+    return { status: 401, message: "Token expired or invalid" };
+  }
+
+  if (payload.role !== "USER") {
+    return { status: 403, message: "Forbidden" };
+  }
+  const userSessions = await userSession.findById(payload.sessionId);
+  if (
+    !userSessions ||
+    userSessions.isActive !== true ||
+    userSessions.userId.toString() !== payload.userId
+  ) {
+    return { status: 401, message: "Session not found" };
+  }
+  const user = await User.findById(payload.userId).select(
+    "_id role fullName email passwordChangedAt",
+  );
+
+  if (!user) {
+    return { status: 401, message: "User not found" };
+  }
+
+  if (payload.iat && user.passwordChangedAt) {
+    if (payload.iat * 1000 < user.passwordChangedAt.getTime()) {
+      return { status: 401, message: "Password changed, login again" };
+    }
+  }
+
+  return {
+    status: 200,
+    data: {
+      userId: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+    },
   };
 };
 
@@ -742,10 +875,18 @@ export const refreshUserTokenService = async (refreshToken) => {
       message: "Password changed, login again",
     };
   }
-
+  const userSessions = await userSession.findById(payload.sessionId);
+  if (
+    !userSessions ||
+    userSessions.isActive !== true ||
+    userSessions.userId.toString() !== payload.userId
+  ) {
+    return { status: 401, message: "Session not found or expired" };
+  }
   const newAccessToken = createUserAccessToken({
     userId: payload.userId,
     role: payload.role,
+    sessionId: payload.sessionId,
   });
 
   return {

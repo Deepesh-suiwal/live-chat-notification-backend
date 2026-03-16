@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  checkToken,
   forgotPasswordOtp,
   googleLogin,
   register,
@@ -18,6 +19,7 @@ import {
   userResetPasswordSchema,
   verifyEmailSchema,
 } from "../user-validation.js";
+import { verifyUserAccessToken } from "../middlewares/user-auth.middleware.js";
 
 const router = express.Router();
 router.post("/google-login", googleLogin);
@@ -36,6 +38,7 @@ router.post(
   validate(userResetPasswordSchema),
   userResetPassword,
 );
+router.get("/check-token", checkToken);
 router.post("/refresh-token", userRefreshToken);
-router.post("/logout", userLogout);
+router.post("/logout", verifyUserAccessToken, userLogout);
 export default router;

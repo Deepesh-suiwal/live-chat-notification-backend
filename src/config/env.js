@@ -33,6 +33,10 @@ const envSchema = z.object({
 
   SENDGRID_API_KEY: z.string(),
   EMAIL_FROM: z.string().email(),
+
+  CLOUDINARY_CLOUD_NAME: z.string(),
+  CLOUDINARY_API_KEY: z.string(),
+  CLOUDINARY_API_SECRET: z.string(),
 });
 
 const parsed = envSchema.safeParse(process.env);

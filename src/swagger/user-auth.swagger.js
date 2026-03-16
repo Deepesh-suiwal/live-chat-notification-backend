@@ -1,5 +1,5 @@
 export const userAuthSwagger = {
-  "/api/users/google-login": {
+  "/api/users/auth/google-login": {
     post: {
       tags: ["User Auth"],
       summary: "Login user using Google OAuth",
@@ -86,7 +86,7 @@ export const userAuthSwagger = {
     },
   },
 
-  "/api/users/register": {
+  "/api/users/auth/register": {
     post: {
       tags: ["User Auth"],
       summary: "Register a new user",
@@ -176,7 +176,7 @@ export const userAuthSwagger = {
     },
   },
 
-  "/api/users/verify-email": {
+  "/api/users/auth/verify-email": {
     post: {
       tags: ["User Auth"],
       summary: "Verify user email using OTP",
@@ -240,7 +240,7 @@ export const userAuthSwagger = {
       security: [],
     },
   },
-  "/api/users/login": {
+  "/api/users/auth/login": {
     post: {
       tags: ["User Auth"],
       summary: "Login user using email and password",
@@ -332,7 +332,7 @@ export const userAuthSwagger = {
     },
   },
 
-  "/api/users/forgot-password": {
+  "/api/users/auth/forgot-password": {
     post: {
       tags: ["User Auth"],
       summary: "Send forgot password OTP",
@@ -426,7 +426,7 @@ export const userAuthSwagger = {
     },
   },
 
-  "/api/users/verify-forgot-password-otp": {
+  "/api/users/auth/verify-forgot-password-otp": {
     post: {
       tags: ["User Auth"],
       summary: "Verify forgot password OTP",
@@ -555,7 +555,7 @@ export const userAuthSwagger = {
     },
   },
 
-  "/api/users/reset-password": {
+  "/api/users/auth/reset-password": {
     post: {
       tags: ["User Auth"],
       summary: "Reset user password using verified OTP session",
@@ -625,7 +625,7 @@ export const userAuthSwagger = {
       },
     },
   },
-  "/api/users/refresh-token": {
+  "/api/users/auth/refresh-token": {
     post: {
       tags: ["User Auth"],
       summary: "Generate new access token using refresh token",
@@ -680,13 +680,17 @@ export const userAuthSwagger = {
       security: [],
     },
   },
-  "/api/users/logout": {
+  "/api/users/auth/logout": {
     post: {
       tags: ["User Auth"],
       summary: "Logout user",
       description:
         "Logs out the authenticated user by clearing the HTTP-only access and refresh token cookies from the browser.",
-
+      security: [
+        {
+          userCookieAuth: [],
+        },
+      ],
       requestBody: {
         required: false,
         description:
@@ -723,8 +727,105 @@ export const userAuthSwagger = {
           description: "Internal server error",
         },
       },
+    },
+  },
+  "/api/users/auth/check-token": {
+    get: {
+      tags: ["User Auth"],
+      summary: "Check user authentication token",
+      description:
+        "Verifies the user access token from HTTP-only cookies and returns user details if the token is valid.",
+      security: [
+        {
+          userCookieAuth: [],
+        },
+      ],
+      requestBody: {
+        required: false,
+        description:
+          "No request body required. The user access token is automatically read from HTTP-only cookies.",
+        content: {
+          "application/json": {},
+        },
+      },
 
-      security: [],
+      responses: {
+        200: {
+          description: "User token valid",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: {
+                    type: "boolean",
+                    example: true,
+                  },
+                  user: {
+                    type: "object",
+                    properties: {
+                      userId: {
+                        type: "string",
+                        example: "665bfc29b43c72c01a93b210",
+                      },
+                      fullName: {
+                        type: "string",
+                        example: "User Name",
+                      },
+                      email: {
+                        type: "string",
+                        example: "user@example.com",
+                      },
+                      role: {
+                        type: "string",
+                        example: "USER",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+
+        401: {
+          description: "Unauthorized - Invalid or missing user token",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: {
+                    type: "string",
+                    example: "Unauthorized",
+                  },
+                },
+              },
+            },
+          },
+        },
+
+        403: {
+          description: "Forbidden - Token does not belong to an admin",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: {
+                    type: "string",
+                    example: "Forbidden",
+                  },
+                },
+              },
+            },
+          },
+        },
+
+        500: {
+          description: "Internal server error",
+        },
+      },
     },
   },
 };
