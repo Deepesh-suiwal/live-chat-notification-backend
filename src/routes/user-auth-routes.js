@@ -40,5 +40,5 @@ router.post(
 );
 router.get("/check-token", checkToken);
 router.post("/refresh-token", userRefreshToken);
-router.post("/logout", verifyUserAccessToken, userLogout);
+router.get("/logout", verifyUserAccessToken, userLogout);
 export default router;

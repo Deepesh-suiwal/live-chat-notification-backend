@@ -203,7 +203,7 @@ export const checkToken = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      user: result.data,
+      user: result.user,
     });
   } catch (error) {
     logger.error(`CHECK TOKEN ERROR: ${error}`);

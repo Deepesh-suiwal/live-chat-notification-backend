@@ -55,38 +55,29 @@ export const initSocket = (server) => {
   ========================= */
 
   io.on("connection", (socket) => {
-    const userId = socket.user.userId;
+    const userId = socket.user?.userId;
+    const sessionId = socket.user?.sessionId;
+
+    if(!userId || !sessionId){
+      return socket.disconnect();
+    }
 
     logger.info(`User connected: ${userId} | socketId: ${socket.id}`);
 
-    /* =========================
-       USER ROOM JOIN
-    ========================= */
+    // 🔥 user room (optional)
+    socket.join(`user:${userId}`);
 
-    const userRoom = `user:${userId}`;
+    // 🔥 session specific room (MOST IMPORTANT)
+    socket.join(`session:${sessionId}`);
 
-    socket.join(userRoom);
-
-    logger.info(`Socket joined room: ${userRoom}`);
-
-    /* =========================
-       MESSAGE EVENT
-    ========================= */
+    logger.info(`Joined session room: session:${sessionId}`);
 
     socket.on("send_message", ({ receiverId, message }) => {
-      const receiverRoom = `user:${receiverId}`;
-
-      io.to(receiverRoom).emit("receive_message", {
+      io.to(`user:${receiverId}`).emit("receive_message", {
         senderId: userId,
         message,
       });
-
-      logger.info(`Message from ${userId} → ${receiverId}`);
     });
-
-    /* =========================
-       DISCONNECT
-    ========================= */
 
     socket.on("disconnect", () => {
       logger.info(`User disconnected: ${userId} | socketId: ${socket.id}`);

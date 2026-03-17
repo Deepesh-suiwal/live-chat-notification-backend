@@ -3,6 +3,7 @@ import swaggerUi from "swagger-ui-express";
 import { adminAuthSwagger } from "./admin-auth.swagger.js";
 import { userAuthSwagger } from "./user-auth.swagger.js";
 import { userProfileSwagger } from "./user-profile.swagger.js";
+import { userSettingsSwagger } from "./user-setting.swagger.js";
 
 export const swaggerSpec = {
   openapi: "3.0.0",
@@ -56,6 +57,7 @@ export const swaggerSpec = {
     ...adminAuthSwagger,
     ...userAuthSwagger,
     ...userProfileSwagger,
+    ...userSettingsSwagger,
   },
 };
 

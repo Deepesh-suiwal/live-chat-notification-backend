@@ -6,12 +6,13 @@ import {
   updateThemeSchema,
   updateOnlineStatusSchema,
   changePasswordSchema,
-  deleteAccountSchema,
 } from "../user-validation.js";
 import {
   changePassword,
   deleteAccount,
+  getActiveSessions,
   logoutAllDevices,
+  logoutSingleSession,
   updateOnlineStatus,
   updateTheme,
 } from "../controllers/user-settings.controller.js";
@@ -36,6 +37,10 @@ router.patch(
 
 router.post("/logout-all", logoutAllDevices);
 
-router.delete("/delete-account", validate(deleteAccountSchema), deleteAccount);
+router.delete("/delete-account", deleteAccount);
+
+router.get("/sessions", getActiveSessions);
+
+router.delete("/sessions/:sessionId", logoutSingleSession);
 
 export default router;

@@ -25,6 +25,7 @@ import { env } from "../config/env.js";
 
 import logger from "../utils/logger.js";
 import userSession from "../models/user-session.js";
+import UserSettings from "../models/user-settings.js";
 
 const OTP_CONFIG = {
   COOLDOWN_SECONDS: 60,
@@ -88,6 +89,13 @@ export const googleLoginService = async ({ code, ip, userAgent }) => {
       deletedAt: null,
     });
 
+    if (user?.status === "INACTIVE" || user?.deletedAt !== null) {
+      return { status: 403, message: "User not active" };
+    }
+
+    if (user?.status === "SUSPENDED") {
+      return { status: 403, message: "Account suspended" };
+    }
     /* =====================================================
        4️⃣ Create user if not exists
     ===================================================== */
@@ -107,6 +115,9 @@ export const googleLoginService = async ({ code, ip, userAgent }) => {
       await UserProfile.create({
         userId: user._id,
         fullName,
+      });
+      await UserSettings.create({
+        userId: user._id,
       });
     } else if (!user.authProvider.includes("GOOGLE")) {
       user.authProvider.push("GOOGLE");
@@ -427,9 +438,16 @@ export const verifyEmailService = async ({ email, otp }) => {
   if (!existingProfile) {
     await UserProfile.create({
       userId: user._id,
-      profile: {
-        fullName: user.fullName,
-      },
+      fullName: user.fullName,
+    });
+  }
+
+  const existingSettings = await UserSettings.findOne({
+    userId: user._id,
+  });
+  if (!existingSettings) {
+    await UserSettings.create({
+      userId: user._id,
     });
   }
 
@@ -806,7 +824,7 @@ export const checkTokenService = async (token) => {
     return { status: 401, message: "Session not found" };
   }
   const user = await User.findById(payload.userId).select(
-    "_id role fullName email passwordChangedAt",
+    "_id role fullName email passwordChangedAt authProvider ",
   );
 
   if (!user) {
@@ -821,11 +839,12 @@ export const checkTokenService = async (token) => {
 
   return {
     status: 200,
-    data: {
+    user: {
       userId: user._id,
       fullName: user.fullName,
       email: user.email,
       role: user.role,
+      authProvider: user.authProvider,
     },
   };
 };
