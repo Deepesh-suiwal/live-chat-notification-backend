@@ -89,11 +89,11 @@ export const googleLoginService = async ({ code, ip, userAgent }) => {
       deletedAt: null,
     });
 
-    if (user?.status === "INACTIVE" || user?.deletedAt !== null) {
+    if (user && user?.deletedAt !== null && user?.status === "INACTIVE") {
       return { status: 403, message: "User not active" };
     }
 
-    if (user?.status === "SUSPENDED") {
+    if (user && user?.status === "SUSPENDED") {
       return { status: 403, message: "Account suspended" };
     }
     /* =====================================================
