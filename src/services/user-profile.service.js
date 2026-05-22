@@ -132,3 +132,59 @@ export const deleteUserAvatarService = async (userId) => {
     data: null,
   };
 };
+
+export const getAllProfilesService = async ({ page = 1, limit = 100 }) => {
+  const skip = (page - 1) * limit;
+
+  const profiles = await UserProfile.aggregate([
+    {
+      $lookup: {
+        from: "users", // collection name (lowercase plural)
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+      },
+    },
+    {
+      $unwind: "$user",
+    },
+
+    // ✅ only active & not deleted users
+    {
+      $match: {
+        "user.status": "ACTIVE",
+        "user.deletedAt": null,
+      },
+    },
+
+    // ✅ sort latest first (optional)
+    {
+      $sort: { createdAt: -1 },
+    },
+
+    // ✅ pagination
+    {
+      $skip: skip,
+    },
+    {
+      $limit: limit,
+    },
+
+    // ✅ only required fields
+    {
+      $project: {
+        _id: 1,
+        fullName: 1,
+        avatar: 1,
+        city: 1,
+        state: 1,
+
+        // user fields
+        email: "$user.email",
+        isEmailVerified: "$user.isEmailVerified",
+      },
+    },
+  ]);
+
+  return profiles;
+};

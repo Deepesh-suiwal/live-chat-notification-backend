@@ -1,5 +1,6 @@
 import {
   deleteUserAvatarService,
+  getAllProfilesService,
   getUserProfileService,
   updateUserProfileService,
 } from "../services/user-profile.service.js";
@@ -75,6 +76,28 @@ export const deleteUserAvatar = async (req, res) => {
 
     return res.status(500).json({
       message: "Server error",
+    });
+  }
+};
+
+export const getAllProfiles = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100;
+
+    const data = await getAllProfilesService({ page, limit });
+
+    return res.status(200).json({
+      success: true,
+      page,
+      count: data.length,
+      data,
+    });
+  } catch (error) {
+    logger.error(error);
+    return res.status(500).json({
+      message: "Something went wrong",
+      error: error.message,
     });
   }
 };

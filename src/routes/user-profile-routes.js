@@ -2,6 +2,7 @@ import express from "express";
 import { verifyUserAccessToken } from "../middlewares/user-auth.middleware.js";
 import {
   deleteUserAvatar,
+  getAllProfiles,
   getUserProfile,
   updateUserProfile,
 } from "../controllers/user-profile-controller.js";
@@ -23,5 +24,5 @@ router.patch(
 );
 
 router.delete("/avatar", deleteUserAvatar);
-
+router.get("/all", getAllProfiles);
 export default router;

@@ -295,4 +295,103 @@ export const userProfileSwagger = {
       },
     },
   },
+  "/api/users/profile/all": {
+    get: {
+      tags: ["User Profile"],
+      summary: "Get all user profiles",
+      description:
+        "Retrieves a paginated list of all active user profiles. Supports filtering by page and limit.",
+      security: [{ userCookieAuth: [] }],
+      parameters: [
+        {
+          in: "query",
+          name: "page",
+          schema: {
+            type: "integer",
+            default: 1,
+          },
+          description: "Page number for pagination",
+        },
+        {
+          in: "query",
+          name: "limit",
+          schema: {
+            type: "integer",
+            default: 100,
+          },
+          description: "Number of profiles per page",
+        },
+      ],
+      responses: {
+        200: {
+          description: "Successfully retrieved all user profiles",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  success: {
+                    type: "boolean",
+                    example: true,
+                  },
+                  page: {
+                    type: "integer",
+                    example: 1,
+                  },
+                  count: {
+                    type: "integer",
+                    example: 100,
+                  },
+                  data: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        _id: {
+                          type: "string",
+                          example: "691a2b3c4d5e6f7a8b9c0d1e",
+                        },
+                        fullName: {
+                          type: "string",
+                          example: "Rahul Sharma",
+                        },
+                        avatar: {
+                          type: "string",
+                          example: "https://example.com/avatar.jpg",
+                        },
+                        city: {
+                          type: "string",
+                          example: "Jaipur",
+                        },
+                        state: {
+                          type: "string",
+                          example: "Rajasthan",
+                        },
+                        email: {
+                          type: "string",
+                          example: "[EMAIL_ADDRESS]",
+                        },
+                        isEmailVerified: {
+                          type: "boolean",
+                          example: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+
+        401: {
+          description: "Authentication required or invalid access token",
+        },
+
+        500: {
+          description: "Internal server error",
+        },
+      },
+    },
+  },
 };
